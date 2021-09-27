@@ -6,6 +6,7 @@ import (
 	"net/mail"
 	"net/url"
 	"os"
+	"regexp"
 	"sort"
 	"strings"
 )
@@ -32,7 +33,7 @@ func main() {
 		case "--exclude-emails":
 			excludeEmails = true
 		case "--help":
-      fmt.Println("Usage: \n\t ./what_domains [ --invalid-tlds ] [ --exclude-emails ]\nPiped with find:\n\t find . -type f -exec cat '{}' \\; 2> /dev/null |  ./what_domains [--tld-sort] [ --invalid-tlds ] [ --exclude-emails ]")
+			fmt.Println("Usage: \n\t ./what_domains [ --invalid-tlds ] [ --exclude-emails ]\nPiped with find:\n\t find . -type f -exec cat '{}' \\; 2> /dev/null |  ./what_domains [--tld-sort] [ --invalid-tlds ] [ --exclude-emails ]")
 			os.Exit(0)
 		}
 	}
@@ -557,7 +558,6 @@ func main() {
 		"got":                      true,
 		"gov":                      true,
 		"gp":                       true,
-		"gq":                       true,
 		"gr":                       true,
 		"grainger":                 true,
 		"graphics":                 true,
@@ -1542,22 +1542,26 @@ func main() {
 	scanner := bufio.NewScanner(os.Stdin)
 	scanner.Split(bufio.ScanWords)
 	hostMap := map[string]bool{}
+	nonWordRegexp, _ := regexp.Compile("[^-a-zA-Z0-9_@:/.]")
+
 	for scanner.Scan() {
-		word := strings.TrimSpace(scanner.Text())
-		split := strings.Split(word, ".")
-		validTld := true
-		if !invalidTlds {
-			validTld = tlds[split[len(split)-1]]
-		}
-		if validTld {
-			validHostname := false
-			hostname := ""
+		word := strings.TrimFunc(scanner.Text(), func(r rune) bool {
+			matched := nonWordRegexp.MatchString(string(r))
+			return matched
+		})
+		isValidCandidate := (len(strings.Split(word, ".")) > 1) && !(nonWordRegexp.MatchString(word))
+		//fmt.Println("is valid", word, isValidCandidate, nonWordRegexp.MatchString(word))
+		if isValidCandidate {
+			hostname := word
 			u, err := url.Parse(word)
-			validHostname = err == nil && len(u.Hostname()) > 0
+			// 1. Try parsing it as url
+			validHostname := err == nil && len(u.Hostname()) > 0
+			//fmt.Println("word", word, "valid", validHostname)
 			if validHostname {
 				hostname = u.Hostname()
 			} else {
 				if !excludeEmails {
+					// 2. Try parsing it as email
 					e, err := mail.ParseAddress(word)
 					validHostname = err == nil && len(e.Address) > 0
 					if validHostname {
@@ -1565,15 +1569,24 @@ func main() {
 					}
 				}
 			}
-			if tldSort {
-				if !hostMap[hostname] {
-					hostMap[hostname] = true
-				}
-			} else {
-				if validHostname {
-					fmt.Println(hostname)
-				}
-			}
+      split := strings.Split(hostname, ".")
+      isValidTld := true
+      if !invalidTlds {
+        isValidTld = tlds[split[len(split)-1]]
+      }
+      if isValidTld {
+        if tldSort {
+          if !hostMap[hostname] {
+            hostMap[hostname] = true
+          }
+        } else {
+          // 3. Fallback to naive regexp
+          wordsRegexp := regexp.MustCompile("^[-A-Za-z0-9_.]{3,}\\.[-A-Za-z0-9_]+$")
+          if wordsRegexp.MatchString(hostname) {
+            fmt.Println(hostname)
+          }
+        }
+      }
 		}
 	}
 

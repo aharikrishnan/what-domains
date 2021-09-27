@@ -8,9 +8,10 @@ A naive script to get domains from stream
 hari:~/src/what-domains⚡ ./what-domains --help
 
 Usage: 
-         ./what_domains [ --invalid-tlds ] [ --exclude-emails ]
+  ./what-domains [ --invalid-tlds ] [ --exclude-emails ]
+
 Piped with find:
-         find . -type f -exec cat '{}' \; 2> /dev/null |  ./what_domains [--tld-sort] [ --invalid-tlds ] [ --exclude-emails ]
+  find . -type f -not -path '*/\.*' -exec grep -Il '.' {} \; 2> /dev/null | xargs -L 1 cat  2> /dev/null |  ./what-domains [--tld-sort] [ --invalid-tlds ] [ --exclude-emails ]
 
 ```
 
